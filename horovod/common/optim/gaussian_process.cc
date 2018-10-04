@@ -15,6 +15,9 @@
 
 #include "gaussian_process.h"
 
+#include <Eigen/LU>
+
+#include <cmath>
 #include <iostream>
 #include <random>
 
@@ -53,13 +56,42 @@ Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const Matri
 GaussianProcessRegressor::GaussianProcessRegressor(double alpha) : alpha_(alpha) {}
 
 // Evaluate mean and variance at a point.
-void GaussianProcessRegressor::Fit(std::shared_ptr<VectorXd> x_train, std::shared_ptr<VectorXd> y_train) {
+void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
   x_train_ = x_train;
   y_train_ = y_train;
 
-  auto nll_fn = [&](const VectorXd& x, VectorXd& grad) {
-
+  auto ln = [](double x) {
+    return std::log(x);
   };
+
+  double a2 = alpha_ * alpha_;
+  double d3 = 0.5 * x_train_->rows() * std::log(2 * M_PI);
+//  auto nll_fn = [&, a2, d3](const VectorXd& x, VectorXd& grad) {
+//    auto k = Kernel(*x_train_, *x_train_, 1.0, 1.0) + a2 * MatrixXd::Identity(x_train_->rows(), x_train_->rows());
+//
+//    // Compute determinant via Cholesky decomposition
+//    Eigen::LLT<MatrixXd> llt(k);
+//    auto l = llt.matrixL();
+//    double d1 = l.toDenseMatrix().diagonal().unaryExpr(ln).sum();
+//    double d2 = 0.5 * y_train_->transpose().dot(k.inverse() * (*y_train_));
+//    return d1 + d2 + d3;
+//  };
+
+  auto step = [&, a2, d3]() {
+    MatrixXd k = Kernel(*x_train_, *x_train_, 1.0, 1.0) + (a2 * MatrixXd::Identity(x_train_->rows(), x_train_->rows()));
+    MatrixXd k_inv = k.inverse();
+
+    // Compute determinant via Cholesky decomposition
+    MatrixXd l = k.llt().matrixL().toDenseMatrix();
+    double d1 = l.diagonal().unaryExpr(ln).sum();
+    MatrixXd d2 = 0.5 * (y_train_->transpose() * (k_inv * (*y_train_)));
+    MatrixXd cov = d2.array() + (d1 + d3);
+
+    return cov;
+  };
+
+  MatrixXd step_out = step();
+  std::cout << "step: " << step_out << std::endl;
 }
 
 } // namespace common

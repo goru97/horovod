@@ -28,15 +28,15 @@ public:
 
   ~GaussianProcessRegressor() {}
 
-  void Fit(std::shared_ptr<Eigen::VectorXd> x_train, std::shared_ptr<Eigen::VectorXd> y_train);
+  void Fit(Eigen::MatrixXd* x_train, Eigen::MatrixXd* y_train);
 
   Eigen::MatrixXd Kernel(const Eigen::MatrixXd& x1, const Eigen::MatrixXd& x2, double l=1.0, double sigma_f=1.0);
 
 private:
   double alpha_;
 
-  std::shared_ptr<Eigen::VectorXd> x_train_;
-  std::shared_ptr<Eigen::VectorXd> y_train_;
+  Eigen::MatrixXd* x_train_;
+  Eigen::MatrixXd* y_train_;
 };
 
 } // namespace common
