@@ -14,6 +14,7 @@
 // =============================================================================
 
 #include "gaussian_process.h"
+#include "LBFGS.h"
 
 #include <Eigen/LU>
 
@@ -27,6 +28,18 @@ using Eigen::MatrixXd;
 
 namespace horovod {
 namespace common {
+
+// Finite-difference approximation of the gradient of a scalar function.
+void ApproxFPrime(const VectorXd& x, const std::function<double(const VectorXd&)>& f, double f0,
+                  VectorXd& grad, double epsilon=1e-8) {
+  VectorXd ei = VectorXd::Zero(x.size());
+  for (int k = 0; k < x.size(); k++) {
+    ei[k] = 1.0;
+    VectorXd d = epsilon * ei;
+    grad[k] = (f(x + d) - f0) / d[k];
+    ei[k] = 0.0;
+  }
+}
 
 // Isotropic squared exponential kernel.
 // Computes a covariance matrix from points in X1 and X2.
@@ -66,19 +79,9 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
 
   double a2 = alpha_ * alpha_;
   double d3 = 0.5 * x_train_->rows() * std::log(2 * M_PI);
-//  auto nll_fn = [&, a2, d3](const VectorXd& x, VectorXd& grad) {
-//    auto k = Kernel(*x_train_, *x_train_, 1.0, 1.0) + a2 * MatrixXd::Identity(x_train_->rows(), x_train_->rows());
-//
-//    // Compute determinant via Cholesky decomposition
-//    Eigen::LLT<MatrixXd> llt(k);
-//    auto l = llt.matrixL();
-//    double d1 = l.toDenseMatrix().diagonal().unaryExpr(ln).sum();
-//    double d2 = 0.5 * y_train_->transpose().dot(k.inverse() * (*y_train_));
-//    return d1 + d2 + d3;
-//  };
-
-  auto step = [&, a2, d3]() {
-    MatrixXd k = Kernel(*x_train_, *x_train_, 1.0, 1.0) + (a2 * MatrixXd::Identity(x_train_->rows(), x_train_->rows()));
+  auto f = [&, a2, d3](const VectorXd& x) {
+    int64_t m = x_train_->rows();
+    MatrixXd k = Kernel(*x_train_, *x_train_, x[0], x[1]) + (a2 * MatrixXd::Identity(m, m));
     MatrixXd k_inv = k.inverse();
 
     // Compute determinant via Cholesky decomposition
@@ -87,11 +90,28 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
     MatrixXd d2 = 0.5 * (y_train_->transpose() * (k_inv * (*y_train_)));
     MatrixXd cov = d2.array() + (d1 + d3);
 
-    return cov;
+    return cov(0, 0);
   };
 
-  MatrixXd step_out = step();
-  std::cout << "step: " << step_out << std::endl;
+  auto nll_fn = [&](const VectorXd& x, VectorXd& grad) {
+    double f0 = f(x);
+    ApproxFPrime(x, f, f0, grad);
+    return f0;
+  };
+
+  LBFGSpp::LBFGSParam<double> param;
+  param.epsilon = 1e-5;
+  param.max_iterations = 100;
+
+  LBFGSpp::LBFGSSolver<double> solver(param);
+
+  VectorXd x = VectorXd::Ones(2);
+  double fx;
+  int niter = solver.minimize(nll_fn, x, fx);
+
+  std::cout << niter << " iterations" << std::endl;
+  std::cout << "x = \n" << x.transpose() << std::endl;
+  std::cout << "f(x) = " << fx << std::endl;
 }
 
 } // namespace common
