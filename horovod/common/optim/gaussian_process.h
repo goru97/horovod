@@ -30,10 +30,38 @@ public:
 
   void Fit(Eigen::MatrixXd* x_train, Eigen::MatrixXd* y_train);
 
-  Eigen::MatrixXd Kernel(const Eigen::MatrixXd& x1, const Eigen::MatrixXd& x2, double l=1.0, double sigma_f=1.0);
+  // Isotropic squared exponential kernel.
+  // Computes a covariance matrix from points in X1 and X2.
+  //
+  // Args:
+  //  x1: Matrix of m points (m x d).
+  //  x2: Matrix of n points (n x d).
+  //
+  // Returns: Covariance matrix (m x n).
+  Eigen::MatrixXd Kernel(const Eigen::MatrixXd& x1, const Eigen::MatrixXd& x2, double l=1.0, double sigma_f=1.0) const;
+
+  void Predict(const Eigen::MatrixXd& x, Eigen::VectorXd& mu, Eigen::VectorXd* sigma=nullptr) const;
+
+  // Computes the suffifient statistics of the GP posterior predictive distribution
+  // from m training data X_train and Y_train and n new inputs X_s.
+  //
+  // Args:
+  //  x_s: New input locations (n x d).
+  //  x_train: Training locations (m x d).
+  //  y_train: Training targets (m x 1).
+  //  l: Kernel length parameter.
+  //  sigma_f: Kernel vertical variation parameter.
+  //  sigma_y: Noise parameter.
+  //
+  // Returns: Posterior mean vector (n x d) and covariance matrix (n x n).
+  void PosteriorPrediction(const Eigen::MatrixXd& x_s, const Eigen::MatrixXd& x_train, const Eigen::MatrixXd& y_train,
+                           Eigen::VectorXd& mu_s, Eigen::MatrixXd& cov_s,
+                           double l=1.0, double sigma_f=1.0, double sigma_y=1e-8) const;
 
 private:
   double alpha_;
+  double length_;
+  double sigma_f_;
 
   Eigen::MatrixXd* x_train_;
   Eigen::MatrixXd* y_train_;

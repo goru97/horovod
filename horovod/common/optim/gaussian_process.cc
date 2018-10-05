@@ -41,31 +41,6 @@ void ApproxFPrime(const VectorXd& x, const std::function<double(const VectorXd&)
   }
 }
 
-// Isotropic squared exponential kernel.
-// Computes a covariance matrix from points in X1 and X2.
-//
-// Args:
-//  X1: Array of m points (m x d).
-//  X2: Array of n points (n x d).
-//
-// Returns: Covariance matrix (m x n).
-Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const MatrixXd& x2,
-                                                 double l, double sigma_f) {
-  auto x1_vec = x1.cwiseProduct(x1).rowwise().sum();
-  auto x2_vec = x2.cwiseProduct(x2).rowwise().sum();
-  auto x1_x2 = x1_vec.replicate(1, x2_vec.size()).rowwise() + x2_vec.transpose();
-
-  auto& dot = x1 * x2.transpose();
-  auto sqdist = x1_x2 - (dot.array() * 2).matrix();
-
-  double sigma_f2 = sigma_f * sigma_f;
-  double l2 = l * l;
-  auto op = [sigma_f2, l2](double x) {
-    return sigma_f2 * std::exp(-0.5 / l2 * x);
-  };
-  return sqdist.unaryExpr(op);
-}
-
 GaussianProcessRegressor::GaussianProcessRegressor(double alpha) : alpha_(alpha) {}
 
 // Evaluate mean and variance at a point.
@@ -109,9 +84,60 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
   double fx;
   int niter = solver.minimize(nll_fn, x, fx);
 
+  length_ = x[0];
+  sigma_f_ = x[1];
+
   std::cout << niter << " iterations" << std::endl;
   std::cout << "x = \n" << x.transpose() << std::endl;
   std::cout << "f(x) = " << fx << std::endl;
+}
+
+void GaussianProcessRegressor::Predict(const MatrixXd& x, VectorXd& mu, VectorXd* sigma) const {
+  MatrixXd cov;
+  PosteriorPrediction(x, *x_train_, *y_train_, mu, cov, length_, sigma_f_, alpha_);
+
+  if (sigma != nullptr) {
+    auto sqrt = [](double x) {
+      return std::sqrt(x);
+    };
+    *sigma = cov.diagonal().unaryExpr(sqrt);
+  }
+}
+
+void GaussianProcessRegressor::PosteriorPrediction(
+    const MatrixXd& x_s, const MatrixXd& x_train, const MatrixXd& y_train, VectorXd& mu_s, MatrixXd& cov_s,
+    double l, double sigma_f, double sigma_y) const {
+  int64_t n = x_s.rows();
+  int64_t m = x_train.rows();
+  double sy2 = sigma_y * sigma_y;
+
+  MatrixXd k = Kernel(x_train, x_train, l, sigma_f) + (sy2 * MatrixXd::Identity(m, m));
+  MatrixXd k_s = Kernel(x_train, x_s, l, sigma_f);
+  MatrixXd k_ss = Kernel(x_s, x_s, l, sigma_f) + (1e-8 * MatrixXd::Identity(n, n));
+  MatrixXd k_inv = k.inverse();
+
+  // Equation (4)
+  mu_s = (k_s.transpose() * k_inv) * y_train;
+
+  // Equation (5)
+  cov_s = k_ss - (k_s.transpose() * k_inv) * k_s;
+}
+
+Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const MatrixXd& x2,
+                                                 double l, double sigma_f) const {
+  auto x1_vec = x1.cwiseProduct(x1).rowwise().sum();
+  auto x2_vec = x2.cwiseProduct(x2).rowwise().sum();
+  auto x1_x2 = x1_vec.replicate(1, x2_vec.size()).rowwise() + x2_vec.transpose();
+
+  auto& dot = x1 * x2.transpose();
+  auto sqdist = x1_x2 - (dot.array() * 2).matrix();
+
+  double sigma_f2 = sigma_f * sigma_f;
+  double l2 = l * l;
+  auto op = [sigma_f2, l2](double x) {
+    return sigma_f2 * std::exp(-0.5 / l2 * x);
+  };
+  return sqdist.unaryExpr(op);
 }
 
 } // namespace common
