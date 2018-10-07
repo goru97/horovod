@@ -14,13 +14,14 @@
 // =============================================================================
 
 #include "gaussian_process.h"
-#include "LBFGS.h"
-
-#include <Eigen/LU>
 
 #include <cmath>
 #include <iostream>
 #include <random>
+
+#include <Eigen/LU>
+
+#include "LBFGS.h"
 
 using Eigen::VectorXd;
 using Eigen::MatrixXd;
