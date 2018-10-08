@@ -25,11 +25,28 @@ namespace common {
 
 class BayesianOptimization {
 public:
-  Eigen::VectorXd ExpectedImprovement(
-      const Eigen::MatrixXd& x, const Eigen::MatrixXd& x_sample, const Eigen::MatrixXd& y_sample, double xi=0.1);
+  BayesianOptimization(double alpha);
+
+  void AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y);
+
+  Eigen::VectorXd NextSample(const Eigen::MatrixXd& x);
+
+  // Computes the EI at points X based on existing samples X_sample and Y_sample
+  // using a Gaussian process surrogate model fitted to the samples.
+  //
+  // Args:
+  //  x: Points at which EI shall be computed (m x d).
+  //  x_sample: Sample locations (n x d).
+  //  y_sample: Sample values (n x 1).
+  //  xi: Exploitation-exploration trade-off parameter.
+  //
+  // Returns: Expected improvements at points X. '''
+  Eigen::VectorXd ExpectedImprovement(const Eigen::MatrixXd& x, const Eigen::MatrixXd& x_sample, double xi=0.1);
 
 private:
   GaussianProcessRegressor gpr_;
+  std::vector<Eigen::VectorXd> x_samples_;
+  std::vector<Eigen::VectorXd> y_samples_;
 };
 
 } // namespace common

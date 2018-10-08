@@ -88,9 +88,9 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
   length_ = x[0];
   sigma_f_ = x[1];
 
-  std::cout << niter << " iterations" << std::endl;
-  std::cout << "x = \n" << x.transpose() << std::endl;
-  std::cout << "f(x) = " << fx << std::endl;
+//  std::cout << niter << " iterations" << std::endl;
+//  std::cout << "x = \n" << x.transpose() << std::endl;
+//  std::cout << "f(x) = " << fx << std::endl;
 }
 
 void GaussianProcessRegressor::Predict(const MatrixXd& x, VectorXd& mu, VectorXd* sigma) const {
