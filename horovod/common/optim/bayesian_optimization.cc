@@ -30,9 +30,20 @@ namespace common {
 
 const double NORM_PDF_C = std::sqrt(2 * M_PI);
 
-BayesianOptimization::BayesianOptimization(int d, double alpha) : d_(d),
-                                                                  dist_(std::uniform_real_distribution<>(-1, 2)),
-                                                                  gpr_(GaussianProcessRegressor(alpha)) {}
+std::vector<std::uniform_real_distribution<>> GetDistributions(std::vector<std::pair<double, double>> bounds) {
+  std::vector<std::uniform_real_distribution<>> dists;
+  for (const std::pair<double, double>& bound : bounds) {
+    dists.push_back(std::uniform_real_distribution<>(bound.first, bound.second));
+  }
+  return dists;
+}
+
+
+BayesianOptimization::BayesianOptimization(int d, std::vector<std::pair<double, double>> bounds, double alpha)
+    : d_(d),
+      bounds_(bounds),
+      dists_(GetDistributions(bounds)),
+      gpr_(GaussianProcessRegressor(alpha)) {}
 
 void BayesianOptimization::AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y) {
   x_samples_.push_back(x);
@@ -57,17 +68,12 @@ VectorXd BayesianOptimization::NextSample() {
 
 VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const MatrixXd& y_sample, int n_restarts) {
   auto f = [&](const VectorXd& x) {
-    // Boundary constraints
-    if (x[0] < -1 - 1e-5 || x[0] > 2 + 1e-5) {
-      return 1.0;
-    }
-
     // Minimization objective is the negative acquisition function
     return -ExpectedImprovement(x, x_sample)[0];
   };
 
   auto min_obj = [&](const VectorXd& x, VectorXd& grad) {
-    double f0 = f(x);
+    double f0 = CheckBounds(x) ? f(x) : 1.0;
     GaussianProcessRegressor::ApproxFPrime(x, f, f0, grad);
     return f0;
   };
@@ -78,16 +84,12 @@ VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const M
 
   LBFGSpp::LBFGSSolver<double> solver(param);
 
-//  VectorXd x_next = VectorXd::Zero(1);
-//  x_next[0] = -1;
-//  double fx_max = -ExpectedImprovement(x_next, x_sample)[0];
-
   VectorXd x_next;
   double fx_max = 1;
   for (int i = 0; i < n_restarts; i++) {
     VectorXd x = VectorXd::Zero(d_);
     for (int j = 0; j < d_; j++) {
-      x[j] = dist_(gen_);
+      x[j] = dists_[j](gen_);
     }
 
     VectorXd x0 = x;
@@ -136,6 +138,15 @@ VectorXd BayesianOptimization::ExpectedImprovement(const MatrixXd& x, const Matr
   VectorXd ei = imp.cwiseProduct(z.unaryExpr(cdf)) + sigma.cwiseProduct(z.unaryExpr(pdf));
   ei = (sigma.array() != 0).select(ei, 0.0);
   return ei;
+}
+
+bool BayesianOptimization::CheckBounds(const Eigen::VectorXd& x) {
+  for (int i = 0; i < x.size(); i++) {
+    if (x[0] < bounds_[i].first || x[0] > bounds_[i].second) {
+      return false;
+    }
+  }
+  return true;
 }
 
 } // namespace common
