@@ -30,38 +30,83 @@ namespace common {
 
 const double NORM_PDF_C = std::sqrt(2 * M_PI);
 
-double erf(double x) {
-  double y = 1.0 / ( 1.0 + 0.3275911 * x);
-  return 1 - (((((
-      + 1.061405429  * y
-      - 1.453152027) * y
-                 + 1.421413741) * y
-                - 0.284496736) * y
-               + 0.254829592) * y)
-             * exp (-x * x);
-}
-
-BayesianOptimization::BayesianOptimization(double alpha) : gpr_(GaussianProcessRegressor(alpha)) {}
+BayesianOptimization::BayesianOptimization(int d, double alpha) : d_(d),
+                                                                  dist_(std::uniform_real_distribution<>(-1, 2)),
+                                                                  gpr_(GaussianProcessRegressor(alpha)) {}
 
 void BayesianOptimization::AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y) {
   x_samples_.push_back(x);
   y_samples_.push_back(y);
 }
 
-VectorXd BayesianOptimization::NextSample(const MatrixXd& x) {
-  MatrixXd x_sample(x_samples_.size(), x_samples_[0].size());
+VectorXd BayesianOptimization::NextSample() {
+  MatrixXd x_sample(x_samples_.size(), d_);
   for (int i = 0; i < x_samples_.size(); i++) {
     x_sample.row(i) = x_samples_[i];
   }
 
-  MatrixXd y_sample(y_samples_.size(), y_samples_[0].size());
+  MatrixXd y_sample(y_samples_.size(), 1);
   for (int i = 0; i < y_samples_.size(); i++) {
     y_sample.row(i) = y_samples_[i];
   }
 
   gpr_.Fit(&x_sample, &y_sample);
 
-  return ExpectedImprovement(x, x_sample);
+  return ProposeLocation(x_sample, y_sample);
+}
+
+VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const MatrixXd& y_sample, int n_restarts) {
+  auto f = [&](const VectorXd& x) {
+    // Boundary constraints
+    if (x[0] < -1 - 1e-5 || x[0] > 2 + 1e-5) {
+      return 1.0;
+    }
+
+    // Minimization objective is the negative acquisition function
+    return -ExpectedImprovement(x, x_sample)[0];
+  };
+
+  auto min_obj = [&](const VectorXd& x, VectorXd& grad) {
+    double f0 = f(x);
+    GaussianProcessRegressor::ApproxFPrime(x, f, f0, grad);
+    return f0;
+  };
+
+  LBFGSpp::LBFGSParam<double> param;
+  param.epsilon = 1e-5;
+  param.max_iterations = 100;
+
+  LBFGSpp::LBFGSSolver<double> solver(param);
+
+//  VectorXd x_next = VectorXd::Zero(1);
+//  x_next[0] = -1;
+//  double fx_max = -ExpectedImprovement(x_next, x_sample)[0];
+
+  VectorXd x_next;
+  double fx_max = 1;
+  for (int i = 0; i < n_restarts; i++) {
+    VectorXd x = VectorXd::Zero(d_);
+    for (int j = 0; j < d_; j++) {
+      x[j] = dist_(gen_);
+    }
+
+    VectorXd x0 = x;
+
+    double fx;
+    solver.minimize(min_obj, x, fx);
+
+    std::cout << "x, fx: " << x0 << " -> " << x << " " << fx << std::endl;
+
+    if (fx < fx_max) {
+      fx_max = fx;
+      x_next = x;
+    }
+  }
+
+  std::cout << "x_next = " << x_next.transpose() << std::endl;
+  std::cout << "f(x) = " << fx_max << std::endl;
+
+  return x_next;
 }
 
 VectorXd BayesianOptimization::ExpectedImprovement(const MatrixXd& x, const MatrixXd& x_sample, double xi) {
@@ -81,11 +126,13 @@ VectorXd BayesianOptimization::ExpectedImprovement(const MatrixXd& x, const Matr
   };
 
   auto cdf = [](double x) {
-    return 0.5 * (1.0 + erf(x / M_SQRT2));
+    return 0.5 * std::erfc(-x * M_SQRT1_2);
   };
 
   Eigen::VectorXd imp = mu.array() - mu_sample_opt - xi;
+
   VectorXd z = imp.array() / sigma.array();
+
   VectorXd ei = imp.cwiseProduct(z.unaryExpr(cdf)) + sigma.cwiseProduct(z.unaryExpr(pdf));
   ei = (sigma.array() != 0).select(ei, 0.0);
   return ei;

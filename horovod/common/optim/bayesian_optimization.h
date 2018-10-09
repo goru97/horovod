@@ -16,6 +16,8 @@
 #ifndef HOROVOD_BAYESIAN_OPTIMIZATION_H
 #define HOROVOD_BAYESIAN_OPTIMIZATION_H
 
+#include <random>
+
 #include <Eigen/Core>
 
 #include "gaussian_process.h"
@@ -25,11 +27,24 @@ namespace common {
 
 class BayesianOptimization {
 public:
-  BayesianOptimization(double alpha);
+  BayesianOptimization(int d, double alpha);
 
   void AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y);
 
-  Eigen::VectorXd NextSample(const Eigen::MatrixXd& x);
+  Eigen::VectorXd NextSample();
+
+private:
+  // Proposes the next sampling point by optimizing the acquisition function.
+  //
+  // Args:
+  //  acquisition: Acquisition function.
+  //  X_sample: Sample locations (n x d).
+  //  Y_sample: Sample values (n x 1).
+  //  gpr: A GaussianProcessRegressor fitted to samples.
+  //
+  // Returns: Location of the acquisition function maximum.
+  Eigen::VectorXd ProposeLocation(
+      const Eigen::MatrixXd& x_sample, const Eigen::MatrixXd& y_sample, int n_restarts=25);
 
   // Computes the EI at points X based on existing samples X_sample and Y_sample
   // using a Gaussian process surrogate model fitted to the samples.
@@ -43,10 +58,14 @@ public:
   // Returns: Expected improvements at points X. '''
   Eigen::VectorXd ExpectedImprovement(const Eigen::MatrixXd& x, const Eigen::MatrixXd& x_sample, double xi=0.1);
 
-private:
+  int d_;
   GaussianProcessRegressor gpr_;
   std::vector<Eigen::VectorXd> x_samples_;
   std::vector<Eigen::VectorXd> y_samples_;
+
+  std::random_device rd_;  // Will be used to obtain a seed for the random number engine
+  std::mt19937 gen_ = std::mt19937(rd_()); // Standard mersenne_twister_engine seeded with rd()
+  std::uniform_real_distribution<> dist_;
 };
 
 } // namespace common

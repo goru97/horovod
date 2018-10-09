@@ -58,6 +58,10 @@ public:
                            Eigen::VectorXd& mu_s, Eigen::MatrixXd& cov_s,
                            double l=1.0, double sigma_f=1.0, double sigma_y=1e-8) const;
 
+  // Finite-difference approximation of the gradient of a scalar function.
+  static void ApproxFPrime(const Eigen::VectorXd& x, const std::function<double(const Eigen::VectorXd&)>& f,
+                           double f0, Eigen::VectorXd& grad, double epsilon=1e-8);
+
 private:
   double alpha_;
   double length_;

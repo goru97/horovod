@@ -30,18 +30,6 @@ using Eigen::MatrixXd;
 namespace horovod {
 namespace common {
 
-// Finite-difference approximation of the gradient of a scalar function.
-void ApproxFPrime(const VectorXd& x, const std::function<double(const VectorXd&)>& f, double f0,
-                  VectorXd& grad, double epsilon=1e-8) {
-  VectorXd ei = VectorXd::Zero(x.size());
-  for (int k = 0; k < x.size(); k++) {
-    ei[k] = 1.0;
-    VectorXd d = epsilon * ei;
-    grad[k] = (f(x + d) - f0) / d[k];
-    ei[k] = 0.0;
-  }
-}
-
 GaussianProcessRegressor::GaussianProcessRegressor(double alpha) : alpha_(alpha) {}
 
 // Evaluate mean and variance at a point.
@@ -139,6 +127,17 @@ Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const Matri
     return sigma_f2 * std::exp(-0.5 / l2 * x);
   };
   return sqdist.unaryExpr(op);
+}
+
+void GaussianProcessRegressor::ApproxFPrime(const VectorXd& x, const std::function<double(const VectorXd&)>& f,
+                                            double f0, VectorXd& grad, double epsilon) {
+  VectorXd ei = VectorXd::Zero(x.size());
+  for (int k = 0; k < x.size(); k++) {
+    ei[k] = 1.0;
+    VectorXd d = epsilon * ei;
+    grad[k] = (f(x + d) - f0) / d[k];
+    ei[k] = 0.0;
+  }
 }
 
 } // namespace common
