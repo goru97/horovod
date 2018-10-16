@@ -97,7 +97,7 @@ VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const M
     double fx;
     solver.minimize(min_obj, x, fx);
 
-    std::cout << "x, fx: " << x0 << " -> " << x << " " << fx << std::endl;
+//    std::cout << "x, fx: " << x0 << " -> " << x << " " << fx << std::endl;
 
     if (fx < fx_max) {
       fx_max = fx;
@@ -105,8 +105,8 @@ VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const M
     }
   }
 
-  std::cout << "x_next = " << x_next.transpose() << std::endl;
-  std::cout << "f(x) = " << fx_max << std::endl;
+//  std::cout << "x_next = " << x_next.transpose() << std::endl;
+//  std::cout << "f(x) = " << fx_max << std::endl;
 
   return x_next;
 }
