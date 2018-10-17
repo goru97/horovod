@@ -153,7 +153,7 @@ private:
     bool IsDoneTuning() const;
     void ResetState();
 
-    BayesianOptimization bayes_;
+    std::unique_ptr<BayesianOptimization> bayes_;
     std::vector<std::pair<double, double>> bounds_;
     int32_t iteration_;
   };

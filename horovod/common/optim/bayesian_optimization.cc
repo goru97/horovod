@@ -72,6 +72,11 @@ VectorXd BayesianOptimization::NextSample() {
   return ProposeLocation(x_sample, y_sample);
 }
 
+void BayesianOptimization::Clear() {
+  x_samples_.clear();
+  y_samples_.clear();
+}
+
 VectorXd BayesianOptimization::ProposeLocation(const MatrixXd& x_sample, const MatrixXd& y_sample, int n_restarts) {
   auto f = [&](const VectorXd& x) {
     // Minimization objective is the negative acquisition function

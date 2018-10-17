@@ -35,6 +35,8 @@ public:
 
   Eigen::VectorXd NextSample();
 
+  void Clear();
+
 private:
   // Proposes the next sampling point by optimizing the acquisition function.
   //
