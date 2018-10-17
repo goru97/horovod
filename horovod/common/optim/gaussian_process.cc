@@ -30,6 +30,15 @@ using Eigen::MatrixXd;
 namespace horovod {
 namespace common {
 
+bool isnan(const VectorXd& x) {
+  for (int i = 0; i < x.size(); i++) {
+    if (std::isnan(x[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 GaussianProcessRegressor::GaussianProcessRegressor(double alpha) : alpha_(alpha) {}
 
 // Evaluate mean and variance at a point.
@@ -57,8 +66,16 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
     return cov(0, 0);
   };
 
+  double f_min = std::numeric_limits<double>::max();
+  VectorXd x_min;
   auto nll_fn = [&](const VectorXd& x, VectorXd& grad) {
     double f0 = f(x);
+
+    if (!isnan(x) && f0 < f_min) {
+      f_min = f0;
+      x_min = x;
+    }
+
     ApproxFPrime(x, f, f0, grad);
     return f0;
   };
@@ -73,8 +90,13 @@ void GaussianProcessRegressor::Fit(MatrixXd* x_train, MatrixXd* y_train) {
   double fx;
   int niter = solver.minimize(nll_fn, x, fx);
 
-  length_ = x[0];
-  sigma_f_ = x[1];
+  if (!isnan(x)) {
+    length_ = x[0];
+    sigma_f_ = x[1];
+  } else {
+    length_ = x_min[0];
+    sigma_f_ = x_min[1];
+  }
 
 //  std::cout << niter << " iterations" << std::endl;
 //  std::cout << "x = \n" << x.transpose() << std::endl;
@@ -112,8 +134,8 @@ void GaussianProcessRegressor::PosteriorPrediction(
   cov_s = k_ss - (k_s.transpose() * k_inv) * k_s;
 }
 
-Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const MatrixXd& x2,
-                                                 double l, double sigma_f) const {
+MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const MatrixXd& x2,
+                                          double l, double sigma_f) const {
   auto x1_vec = x1.cwiseProduct(x1).rowwise().sum();
   auto x2_vec = x2.cwiseProduct(x2).rowwise().sum();
   auto x1_x2 = x1_vec.replicate(1, x2_vec.size()).rowwise() + x2_vec.transpose();
@@ -126,6 +148,7 @@ Eigen::MatrixXd GaussianProcessRegressor::Kernel(const MatrixXd& x1, const Matri
   auto op = [sigma_f2, l2](double x) {
     return sigma_f2 * std::exp(-0.5 / l2 * x);
   };
+
   return sqdist.unaryExpr(op);
 }
 
