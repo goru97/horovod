@@ -183,9 +183,6 @@ struct HorovodGlobalState {
   // Cross-node communicator for hierarchical allreduce.
   MPI_Comm cross_comm;
 
-  // Do hierarchical allreduce with MPI + NCCL.
-  bool hierarchical_allreduce = false;
-
 // The CUDA stream used for data transfers and within-allreduce operations.
 // A naive implementation would use the TensorFlow StreamExecutor CUDA
 // stream. However, the allreduce and allgather require doing memory copies
@@ -853,7 +850,7 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
       // Determine GPU IDs of the devices participating in this communicator.
       std::vector<int32_t> nccl_device_map;
-      if (horovod_global.hierarchical_allreduce) {
+      if (horovod_global.param_manager.HierarchicalAllreduce()) {
         for (int rank : horovod_global.local_comm_ranks) {
           nccl_device_map.push_back(response.devices()[rank]);
         }
@@ -869,7 +866,7 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
 
         int nccl_rank, nccl_size;
         MPI_Comm nccl_id_bcast_comm;
-        if (horovod_global.hierarchical_allreduce) {
+        if (horovod_global.param_manager.HierarchicalAllreduce()) {
           nccl_rank = horovod_global.local_rank;
           nccl_size = horovod_global.local_size;
           nccl_id_bcast_comm = horovod_global.local_comm;
@@ -988,7 +985,7 @@ void PerformOperation(TensorTable& tensor_table, MPIResponse response) {
                               ddl_data_type,
                               DDL_OP_SUM))
 #else
-      if (horovod_global.hierarchical_allreduce) {
+      if (horovod_global.param_manager.HierarchicalAllreduce()) {
         NCCL_CHECK(entries, "ncclReduce",
                    ncclReduce(fused_input_data, buffer_data,
                               (size_t)num_elements,
@@ -1417,13 +1414,17 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
 
   // Set flag for hierarchical allreduce. Ignore if Horovod is running on a
   // single node.
-  auto horovod_hierarchical_allreduce =
-      std::getenv(HOROVOD_HIERARCHICAL_ALLREDUCE);
-  if (horovod_hierarchical_allreduce != nullptr &&
-      std::strtol(horovod_hierarchical_allreduce, nullptr, 10) > 0 &&
-      cross_size > 1) {
-    state.hierarchical_allreduce = true;
+  auto horovod_hierarchical_allreduce = std::getenv(HOROVOD_HIERARCHICAL_ALLREDUCE);
+  if (horovod_hierarchical_allreduce != nullptr) {
+    bool value = std::strtol(horovod_hierarchical_allreduce, nullptr, 10) > 0 &&
+                 cross_size > 1;
+    state.param_manager.SetHierarchicalAllreduce(value);
   }
+
+#if HOROVOD_GPU_ALLREDUCE != 'N' && HOROVOD_GPU_ALLREDUCE != 'D'
+  // Hierarchical allreduce is not supported without NCCL or DDL
+  state.param_manager.SetHierarchicalAllreduce(false);
+#endif
 
   // Initialize the tensor count table. No tensors are available yet.
   if (is_coordinator) {

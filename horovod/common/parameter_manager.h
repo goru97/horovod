@@ -48,6 +48,10 @@ public:
     return active_;
   }
 
+  // Do hierarchical allreduce with MPI + NCCL.
+  bool HierarchicalAllreduce() const;
+  void SetHierarchicalAllreduce(bool value);
+
   // Threshold for Tensor Fusion.  All tensors that occupy memory beyond this
   // threshold will be fused.
   int64_t TensorFusionThresholdBytes() const;
@@ -74,6 +78,7 @@ private:
   public:
     virtual void Tune(double score) = 0;
     virtual double BestScore() const = 0;
+    virtual bool IsTunable() const = 0;
   };
 
   template <class T>
@@ -87,10 +92,13 @@ private:
     inline T BestValue() const { return best_value_; };
     inline double BestScore() const override { return best_score_; };
 
+    inline bool IsTunable() const override { return tunable_; };
+
   protected:
     void SetCurrentValue(T value);
 
   private:
+    void TuneNextParameter();
     void CompleteTuning();
     virtual void OnTune(double score, T& value) = 0;
     virtual bool IsDoneTuning() const = 0;
@@ -101,6 +109,8 @@ private:
 
     T best_value_;
     double best_score_;
+
+    bool tunable_;
 
     ParameterManager& parent_;
     ITunableParameter* const next_param_;

@@ -79,6 +79,15 @@ void ParameterManager::SetAutoTuning(bool active) {
   active_ = active;
 };
 
+bool ParameterManager::HierarchicalAllreduce() const {
+  int64_t v = active_ ? hierarchical_allreduce_.Value() : hierarchical_allreduce_.BestValue();
+  return v > 0;
+}
+
+void ParameterManager::SetHierarchicalAllreduce(bool value) {
+  hierarchical_allreduce_.SetValue(value ? 1 : 0);
+}
+
 int64_t ParameterManager::TensorFusionThresholdBytes() const {
   int64_t b = active_ ? joint_params_.Value()[0] : joint_params_.BestValue()[0];
   return b * 1024 * 1024;
@@ -129,7 +138,8 @@ void ParameterManager::Update(const std::vector<std::string>& tensor_names, int6
 void ParameterManager::Tune(double score) {
   if (warmup_remaining_ > 0) {
     warmup_remaining_--;
-    std::cerr << "WARMUP DONE" << std::endl;
+    std::cerr << "WARMUP DONE | hierarchical tunable="
+              << hierarchical_allreduce_.IsTunable() << " value=" << HierarchicalAllreduce() << std::endl;
   } else {
     if (rank_ == root_rank_) {
       std::cerr << total_bytes_ << ", " << total_seconds_ << " "
@@ -162,11 +172,17 @@ ParameterManager::TunableParameter<T>::TunableParameter(
     value_(initial_value),
     best_value_(initial_value),
     best_score_(0),
+    tunable_(true),
     parent_(parent),
     next_param_(next_param) {}
 
 template <class T>
 void ParameterManager::TunableParameter<T>::Tune(double score) {
+  if (!tunable_) {
+    TuneNextParameter();
+    return;
+  }
+
   if (score > best_score_) {
     best_score_ = score;
     best_value_ = value_;
@@ -180,8 +196,10 @@ void ParameterManager::TunableParameter<T>::Tune(double score) {
 
 template <class T>
 void ParameterManager::TunableParameter<T>::SetValue(T value) {
+  value_ = value;
   best_value_ = value;
   best_score_ = 0;
+  tunable_ = false;
 }
 
 template <class T>
@@ -190,13 +208,17 @@ void ParameterManager::TunableParameter<T>::SetCurrentValue(T value) {
 }
 
 template <class T>
-void ParameterManager::TunableParameter<T>::CompleteTuning() {
+void ParameterManager::TunableParameter<T>::TuneNextParameter() {
   if (next_param_ != nullptr) {
     next_param_->Tune(best_score_);
   } else {
     parent_.SetAutoTuning(false);
   }
+}
 
+template <class T>
+void ParameterManager::TunableParameter<T>::CompleteTuning() {
+  TuneNextParameter();
   value_ = initial_value_;
   ResetState();
 }
