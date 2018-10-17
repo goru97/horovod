@@ -144,6 +144,8 @@ void ThrowIfError(Status status) {
     throw std::logic_error(status.reason());
   case StatusType::ABORTED:
     throw std::runtime_error(status.reason());
+  case StatusType::INVALID_ARGUMENT:
+    throw std::invalid_argument(status.reason());
   default: // Includes UNKNOWN_ERROR
     throw std::runtime_error(status.reason());
   }
@@ -170,7 +172,8 @@ ADAPTER_DEFINE_TYPE(MPIDataType::HOROVOD_INT32, DeviceType::GPU,
                     THCudaIntTensor)
 ADAPTER_DEFINE_TYPE(MPIDataType::HOROVOD_INT64, DeviceType::GPU,
                     THCudaLongTensor)
-ADAPTER_DEFINE_TYPE(MPIDataType::HOROVOD_FLOAT32, DeviceType::GPU, THCudaTensor)
+ADAPTER_DEFINE_TYPE(MPIDataType::HOROVOD_FLOAT32, DeviceType::GPU,
+                    THCudaTensor)
 ADAPTER_DEFINE_TYPE(MPIDataType::HOROVOD_FLOAT64, DeviceType::GPU,
                     THCudaDoubleTensor)
 #endif

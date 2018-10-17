@@ -48,6 +48,8 @@ const MPIDataType TorchTensor::dtype() const {
     return common::HOROVOD_INT32;
   case at::ScalarType::Long:
     return common::HOROVOD_INT64;
+  case at::ScalarType::Half:
+    return common::HOROVOD_FLOAT16;
   case at::ScalarType::Float:
     return common::HOROVOD_FLOAT32;
   case at::ScalarType::Double:
@@ -106,6 +108,8 @@ void ThrowIfError(Status status) {
     throw std::logic_error(status.reason());
   case StatusType::ABORTED:
     throw std::runtime_error(status.reason());
+  case StatusType::INVALID_ARGUMENT:
+    throw std::invalid_argument(status.reason());
   default: // Includes UNKNOWN_ERROR
     throw std::runtime_error(status.reason());
   }
