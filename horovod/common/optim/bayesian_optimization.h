@@ -29,6 +29,8 @@ class BayesianOptimization {
 public:
   BayesianOptimization(int d, std::vector<std::pair<double, double>> bounds, double alpha);
 
+  void AddSample(const Eigen::VectorXd& x, double y);
+
   void AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y);
 
   Eigen::VectorXd NextSample();

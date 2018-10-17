@@ -287,5 +287,49 @@ void ParameterManager::CategoricalParameter<T>::ResetState() {
   index_ = 0;
 }
 
+// BayesianParameter
+Eigen::VectorXd GetTestPoint(std::vector<std::pair<double, double>> bounds, double s) {
+  Eigen::VectorXd v = Eigen::VectorXd::Zero(bounds.size());
+  for (int i = 0; i < v.size(); i++) {
+    double min = bounds[i].first;
+    double max = bounds[i].second;
+    v[i] = min + (max - min) * s;
+  }
+  return v;
+}
+
+ParameterManager::BayesianParameter::BayesianParameter(
+    std::vector<std::pair<double, double>> bounds,
+    ParameterManager& parent,
+    ParameterManager::ITunableParameter* const next_param) :
+    TunableParameter<Eigen::VectorXd>(GetTestPoint(bounds, 1.0 / 3.0), parent, next_param),
+    bayes_(bounds.size(), bounds, 0.2),
+    bounds_(bounds),
+    iteration_(0) {
+  ResetState();
+}
+
+template <class T>
+void ParameterManager::BayesianParameter::OnTune(double score, Eigen::VectorXd& value) {
+  bayes_.AddSample(value, score);
+
+  iteration_++;
+  if (iteration_ > 1) {
+    value = bayes_.NextSample();
+  } else {
+    value = GetTestPoint(bounds_, 2.0 / 3.0);
+  }
+}
+
+template <class T>
+bool ParameterManager::BayesianParameter::IsDoneTuning() const {
+  return iteration_ > 10;
+}
+
+template <class T>
+void ParameterManager::BayesianParameter::ResetState() {
+  iteration_ = 0;
+}
+
 } // namespace common
 } // namespace horovod

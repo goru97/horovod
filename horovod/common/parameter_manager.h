@@ -16,10 +16,14 @@
 #ifndef HOROVOD_PARAMETER_MANAGER_H
 #define HOROVOD_PARAMETER_MANAGER_H
 
+#include "optim/bayesian_optimization.h"
+
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
+
+#include <Eigen/Core>
 
 namespace horovod {
 namespace common {
@@ -139,6 +143,21 @@ private:
     int32_t index_;
   };
 
+  class BayesianParameter : public TunableParameter<Eigen::VectorXd> {
+  public:
+    BayesianParameter(std::vector<std::pair<double, double>> bounds,
+                      ParameterManager& parent, ITunableParameter* const next_param);
+
+  private:
+    void OnTune(double score, Eigen::VectorXd& value);
+    bool IsDoneTuning() const;
+    void ResetState();
+
+    BayesianOptimization bayes_;
+    std::vector<std::pair<double, double>> bounds_;
+    int32_t iteration_;
+  };
+
 //  NumericParameter<int64_t> tensor_fusion_threshold_mb_;
   CategoricalParameter<int64_t> tensor_fusion_threshold_mb_;
 
@@ -162,6 +181,8 @@ private:
   std::ofstream file_;
   bool writing_;
 };
+
+
 
 } // namespace common
 } // namespace horovod

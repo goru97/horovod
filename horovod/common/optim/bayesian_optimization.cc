@@ -45,6 +45,12 @@ BayesianOptimization::BayesianOptimization(int d, std::vector<std::pair<double, 
       dists_(GetDistributions(bounds)),
       gpr_(GaussianProcessRegressor(alpha)) {}
 
+void BayesianOptimization::AddSample(const Eigen::VectorXd& x, double y) {
+  VectorXd y_v(1);
+  y_v << y;
+  AddSample(x, y_v);
+}
+
 void BayesianOptimization::AddSample(const Eigen::VectorXd& x, const Eigen::VectorXd& y) {
   x_samples_.push_back(x);
   y_samples_.push_back(y);
