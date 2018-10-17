@@ -158,11 +158,14 @@ private:
     int32_t iteration_;
   };
 
+  CategoricalParameter<int64_t> hierarchical_allreduce_;
+  BayesianParameter joint_params_;
+
 //  NumericParameter<int64_t> tensor_fusion_threshold_mb_;
-  CategoricalParameter<int64_t> tensor_fusion_threshold_mb_;
+//  CategoricalParameter<int64_t> tensor_fusion_threshold_mb_;
 
 //  NumericParameter<double> cycle_time_ms_;
-  CategoricalParameter<double> cycle_time_ms_;
+//  CategoricalParameter<double> cycle_time_ms_;
 
   ITunableParameter* const leaf_param_;
   bool active_;

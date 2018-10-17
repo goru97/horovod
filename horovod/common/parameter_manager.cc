@@ -39,14 +39,18 @@ std::vector<double> CycleTimes() {
 
 // ParameterManager
 ParameterManager::ParameterManager() :
-    tensor_fusion_threshold_mb_(CategoricalParameter<int64_t>(
-        std::vector<int64_t>{0, 1, 2, 4, 8, 16, 32, 64}, *this, nullptr)),
+    hierarchical_allreduce_(CategoricalParameter<int64_t>(std::vector<int64_t>{0, 1}, *this, nullptr)),
+    joint_params_(BayesianParameter(std::vector<std::pair<double, double>>{
+      std::pair<double, double>(0, 64), std::pair<double, double>(0, 100)
+    }, *this, nullptr)),
+//    tensor_fusion_threshold_mb_(CategoricalParameter<int64_t>(
+//        std::vector<int64_t>{0, 1, 2, 4, 8, 16, 32, 64}, *this, nullptr)),
 //    tensor_fusion_threshold_mb_(NumericParameter<int64_t>(
 //        1024 * 1024, 256 * 1024 * 1024, *this, nullptr)),
-    cycle_time_ms_(CategoricalParameter<double>(
-        CycleTimes(), *this, &tensor_fusion_threshold_mb_)),
+//    cycle_time_ms_(CategoricalParameter<double>(
+//        CycleTimes(), *this, &tensor_fusion_threshold_mb_)),
 //    cycle_time_ms_(NumericParameter<double>(1.0, 200.0, *this, &tensor_fusion_threshold_mb_)),
-    leaf_param_(&cycle_time_ms_),
+    leaf_param_(&joint_params_),
     active_(false),
     warmup_remaining_(WARMUPS),
     cycle_(0),
@@ -76,20 +80,24 @@ void ParameterManager::SetAutoTuning(bool active) {
 };
 
 int64_t ParameterManager::TensorFusionThresholdBytes() const {
-  int64_t b = active_ ? tensor_fusion_threshold_mb_.Value() : tensor_fusion_threshold_mb_.BestValue();
+  int64_t b = active_ ? joint_params_.Value()[0] : joint_params_.BestValue()[0];
   return b * 1024 * 1024;
 };
 
 void ParameterManager::SetTensorFusionThresholdBytes(int64_t threshold) {
-  tensor_fusion_threshold_mb_.SetValue(threshold / (1024 * 1024));
+  Eigen::VectorXd v = joint_params_.BestValue();
+  v[0] = threshold / (1024 * 1024);
+  joint_params_.SetValue(v);
 }
 
 double ParameterManager::CycleTimeMs() const {
-  return active_ ? cycle_time_ms_.Value() : cycle_time_ms_.BestValue();
+  return active_ ? joint_params_.Value()[1] : joint_params_.BestValue()[1];
 };
 
 void ParameterManager::SetCycleTimeMs(double cycle_time_ms) {
-  cycle_time_ms_.SetValue(cycle_time_ms);
+  Eigen::VectorXd v = joint_params_.BestValue();
+  v[1] = cycle_time_ms;
+  joint_params_.SetValue(v);
 }
 
 void ParameterManager::Update(const std::vector<std::string>& tensor_names, int64_t bytes, double seconds) {
@@ -125,12 +133,12 @@ void ParameterManager::Tune(double score) {
   } else {
     if (rank_ == root_rank_) {
       std::cerr << total_bytes_ << ", " << total_seconds_ << " "
-                << "[" << cycle_time_ms_.Value() << ", " << tensor_fusion_threshold_mb_.Value() << "] " << score << "  "
-                << "[" << cycle_time_ms_.BestValue() << ", " << tensor_fusion_threshold_mb_.BestValue() << "] "
+                << "[" << joint_params_.Value()[1] << ", " << joint_params_.Value()[0] << "] " << score << "  "
+                << "[" << joint_params_.BestValue()[1] << ", " << joint_params_.BestValue()[0] << "] "
                 << leaf_param_->BestScore()
                 << std::endl;
       if (writing_ && file_.good()) {
-        file_ << cycle_time_ms_.Value() << "," << tensor_fusion_threshold_mb_.Value() << "," << score << std::endl;
+        file_ << joint_params_.Value()[1] << "," << joint_params_.Value()[0] << "," << score << std::endl;
       }
     }
 
