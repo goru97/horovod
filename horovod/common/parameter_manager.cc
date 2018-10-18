@@ -63,14 +63,16 @@ ParameterManager::ParameterManager() :
 }
 
 void ParameterManager::CreateMpiTypes() {
-  const int nitems = 3;
-  int blocklengths[3] = {1, 1, 1};
-  MPI_Datatype types[3] = {MPI_CXX_BOOL, MPI_DOUBLE, MPI_DOUBLE};
+  const int nitems = 5;
+  int blocklengths[5] = {1, 1, 1, 1, 1};
+  MPI_Datatype types[5] = {MPI_CXX_BOOL, MPI_DOUBLE, MPI_DOUBLE, MPI_DOUBLE, MPI_CXX_BOOL};
 
-  MPI_Aint offsets[3];
+  MPI_Aint offsets[5];
   offsets[0] = offsetof(Params, hierarchical_allreduce);
   offsets[1] = offsetof(Params, tensor_fusion_threshold);
   offsets[2] = offsetof(Params, cycle_time);
+  offsets[3] = offsetof(Params, last_score);
+  offsets[4] = offsetof(Params, active);
 
   MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_params_type_);
   MPI_Type_commit(&mpi_params_type_);
@@ -180,7 +182,7 @@ void ParameterManager::Tune(double score) {
       leaf_param_->Tune(score);
     }
 
-    SyncParams();
+    SyncParams(score);
   }
   ReadyTune();
 }
@@ -192,22 +194,28 @@ void ParameterManager::ReadyTune() {
   cycle_ = 0;
 }
 
-void ParameterManager::SyncParams() {
+void ParameterManager::SyncParams(double last_score) {
   Params params;
   if (rank_ == root_rank_) {
     params.hierarchical_allreduce = hierarchical_allreduce_.Value();
     params.tensor_fusion_threshold = joint_params_.Value()[0];
     params.cycle_time = joint_params_.Value()[1];
+    params.last_score = last_score;
+    params.active = active_;
   }
 
   MPI_Bcast(&params, 1, mpi_params_type_, root_rank_, mpi_comm_);
   if (rank_ != root_rank_) {
     hierarchical_allreduce_.SetValue(params.hierarchical_allreduce, true);
+    hierarchical_allreduce_.UpdateBestValue(params.last_score);
 
     Eigen::VectorXd v(2);
     v(0) = params.tensor_fusion_threshold;
     v(1) = params.cycle_time;
     joint_params_.SetValue(v, true);
+    joint_params_.UpdateBestValue(params.last_score);
+
+    active_ = params.active;
   }
 }
 
@@ -230,14 +238,18 @@ void ParameterManager::TunableParameter<T>::Tune(double score) {
     return;
   }
 
-  if (score > best_score_) {
-    best_score_ = score;
-    best_value_ = value_;
-  }
-
+  UpdateBestValue(score);
   OnTune(score, value_);
   if (IsDoneTuning()) {
     CompleteTuning();
+  }
+}
+
+template <class T>
+void ParameterManager::TunableParameter<T>::UpdateBestValue(double score) {
+  if (score > best_score_) {
+    best_score_ = score;
+    best_value_ = value_;
   }
 }
 

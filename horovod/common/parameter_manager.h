@@ -72,7 +72,7 @@ public:
 private:
   void Tune(double score);
   void ReadyTune();
-  void SyncParams();
+  void SyncParams(double last_score);
 
   template <class T>
   struct ParameterScore {
@@ -83,6 +83,7 @@ private:
   class ITunableParameter {
   public:
     virtual void Tune(double score) = 0;
+    virtual void UpdateBestValue(double score) = 0;
     virtual double BestScore() const = 0;
     virtual bool IsTunable() const = 0;
   };
@@ -92,6 +93,7 @@ private:
   public:
     TunableParameter(T initial_value, ParameterManager& parent, ITunableParameter* const next_param);
     void Tune(double score) override;
+    void UpdateBestValue(double score) override;
 
     void SetValue(T value, bool fixed);
     inline T Value() const { return value_; };
@@ -204,6 +206,8 @@ private:
     bool hierarchical_allreduce;
     double tensor_fusion_threshold;
     double cycle_time;
+    double last_score;
+    bool active;
   };
 
   MPI_Datatype mpi_params_type_;
