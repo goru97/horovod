@@ -144,12 +144,12 @@ void ParameterManager::Tune(double score) {
     std::cerr << "WARMUP DONE | hierarchical tunable="
               << hierarchical_allreduce_.IsTunable() << " value=" << HierarchicalAllreduce() << std::endl;
   } else {
+    std::cerr << "(" << rank_ << ") " << total_bytes_ << ", " << total_seconds_ << " "
+              << "[" << joint_params_.Value()[1] << " ms , " << joint_params_.Value()[0] << " mb ] " << score << "  "
+              << "[" << joint_params_.BestValue()[1] << " ms , " << joint_params_.BestValue()[0] << " mb] "
+              << leaf_param_->BestScore()
+              << std::endl;
     if (rank_ == root_rank_) {
-      std::cerr << total_bytes_ << ", " << total_seconds_ << " "
-                << "[" << joint_params_.Value()[1] << ", " << joint_params_.Value()[0] << "] " << score << "  "
-                << "[" << joint_params_.BestValue()[1] << ", " << joint_params_.BestValue()[0] << "] "
-                << leaf_param_->BestScore()
-                << std::endl;
       if (writing_ && file_.good()) {
         file_ << joint_params_.Value()[1] << "," << joint_params_.Value()[0] << "," << score << std::endl;
       }
