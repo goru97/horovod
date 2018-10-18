@@ -23,6 +23,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "mpi.h"
+
 #include <Eigen/Core>
 
 namespace horovod {
@@ -41,7 +43,10 @@ class ParameterManager {
 public:
   ParameterManager();
 
-  void Initialize(int32_t rank, int32_t root_rank, std::string file_name);
+  void CreateMpiTypes();
+  void FreeMpiTypes();
+
+  void Initialize(int32_t rank, int32_t root_rank, MPI_Comm mpi_comm, std::string file_name);
   void SetAutoTuning(bool active);
 
   inline bool IsAutoTuning() const {
@@ -67,6 +72,7 @@ public:
 private:
   void Tune(double score);
   void ReadyTune();
+  void SyncParams();
 
   template <class T>
   struct ParameterScore {
@@ -168,7 +174,7 @@ private:
     int32_t iteration_;
   };
 
-  CategoricalParameter<int64_t> hierarchical_allreduce_;
+  CategoricalParameter<bool> hierarchical_allreduce_;
   BayesianParameter joint_params_;
 
 //  NumericParameter<int64_t> tensor_fusion_threshold_mb_;
@@ -193,6 +199,15 @@ private:
   int32_t root_rank_;
   std::ofstream file_;
   bool writing_;
+
+  struct Params {
+    bool hierarchical_allreduce;
+    double tensor_fusion_threshold;
+    double cycle_time;
+  };
+
+  MPI_Datatype mpi_params_type_;
+  MPI_Comm mpi_comm_;
 };
 
 

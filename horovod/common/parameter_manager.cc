@@ -19,6 +19,8 @@
 #include <cmath>
 #include <limits>
 
+#include "mpi.h"
+
 namespace horovod {
 namespace common {
 
@@ -39,7 +41,7 @@ std::vector<double> CycleTimes() {
 
 // ParameterManager
 ParameterManager::ParameterManager() :
-    hierarchical_allreduce_(CategoricalParameter<int64_t>(std::vector<int64_t>{0, 1}, *this, nullptr)),
+    hierarchical_allreduce_(CategoricalParameter<bool>(std::vector<bool>{false, true}, *this, nullptr)),
     joint_params_(BayesianParameter(std::vector<std::pair<double, double>>{
       std::pair<double, double>(0, 64), std::pair<double, double>(0, 100)
     }, *this, nullptr)),
@@ -60,9 +62,30 @@ ParameterManager::ParameterManager() :
   ReadyTune();
 }
 
-void ParameterManager::Initialize(int32_t rank, int32_t root_rank, std::string file_name) {
+void ParameterManager::CreateMpiTypes() {
+  const int nitems = 3;
+  int blocklengths[3] = {1, 1, 1};
+  MPI_Datatype types[3] = {MPI_CXX_BOOL, MPI_DOUBLE, MPI_DOUBLE};
+
+  MPI_Aint offsets[3];
+  offsets[0] = offsetof(Params, hierarchical_allreduce);
+  offsets[1] = offsetof(Params, tensor_fusion_threshold);
+  offsets[2] = offsetof(Params, cycle_time);
+
+  MPI_Type_create_struct(nitems, blocklengths, offsets, types, &mpi_params_type_);
+  MPI_Type_commit(&mpi_params_type_);
+}
+
+void ParameterManager::FreeMpiTypes() {
+  if (mpi_params_type_ != MPI_DATATYPE_NULL) {
+    MPI_Type_free(&mpi_params_type_);
+  }
+}
+
+void ParameterManager::Initialize(int32_t rank, int32_t root_rank, MPI_Comm mpi_comm, std::string file_name) {
   rank_ = rank;
   root_rank_ = root_rank;
+  mpi_comm_ = mpi_comm;
   if (rank_ == root_rank && !file_name.empty()) {
     file_.open(file_name, std::ios::out | std::ios::trunc);
     if (file_.good()) {
@@ -83,12 +106,11 @@ void ParameterManager::SetAutoTuning(bool active) {
 };
 
 bool ParameterManager::HierarchicalAllreduce() const {
-  int64_t v = active_ ? hierarchical_allreduce_.Value() : hierarchical_allreduce_.BestValue();
-  return v > 0;
+  return active_ ? hierarchical_allreduce_.Value() : hierarchical_allreduce_.BestValue();
 }
 
 void ParameterManager::SetHierarchicalAllreduce(bool value, bool fixed) {
-  hierarchical_allreduce_.SetValue(value ? 1 : 0, fixed);
+  hierarchical_allreduce_.SetValue(value, fixed);
 }
 
 int64_t ParameterManager::TensorFusionThresholdBytes() const {
@@ -149,13 +171,16 @@ void ParameterManager::Tune(double score) {
               << "[" << joint_params_.BestValue()[1] << " ms , " << joint_params_.BestValue()[0] << " mb] "
               << leaf_param_->BestScore()
               << std::endl;
+
     if (rank_ == root_rank_) {
       if (writing_ && file_.good()) {
         file_ << joint_params_.Value()[1] << "," << joint_params_.Value()[0] << "," << score << std::endl;
       }
+
+      leaf_param_->Tune(score);
     }
 
-    leaf_param_->Tune(score);
+    SyncParams();
   }
   ReadyTune();
 }
@@ -165,6 +190,25 @@ void ParameterManager::ReadyTune() {
   total_seconds_ = 0;
   tensor_counts_.clear();
   cycle_ = 0;
+}
+
+void ParameterManager::SyncParams() {
+  Params params;
+  if (rank_ == root_rank_) {
+    params.hierarchical_allreduce = hierarchical_allreduce_.Value();
+    params.tensor_fusion_threshold = joint_params_.Value()[0];
+    params.cycle_time = joint_params_.Value()[1];
+  }
+
+  MPI_Bcast(&params, 1, mpi_params_type_, root_rank_, mpi_comm_);
+  if (rank_ != root_rank_) {
+    hierarchical_allreduce_.SetValue(params.hierarchical_allreduce, true);
+
+    Eigen::VectorXd v(2);
+    v(0) = params.tensor_fusion_threshold;
+    v(1) = params.cycle_time;
+    joint_params_.SetValue(v, true);
+  }
 }
 
 // TunableParameter

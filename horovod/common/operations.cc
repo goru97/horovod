@@ -1559,6 +1559,9 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
   MPI_Op mpi_float16_sum;
   MPI_Op_create(&float16_sum, 1, &mpi_float16_sum);
 
+  // Create custom datatypes for the parameter manager.
+  state.param_manager.CreateMpiTypes();
+
   state.rank = rank;
   state.local_rank = local_rank;
   state.cross_rank = cross_rank;
@@ -1628,7 +1631,7 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
   auto horovod_tune_params = std::getenv(HOROVOD_TUNE_PARAMS);
   if (horovod_tune_params != nullptr && std::strtol(horovod_tune_params, nullptr, 10) > 0) {
     auto horovod_params = std::getenv(HOROVOD_PARAMS_OUTPUT);
-    state.param_manager.Initialize(rank, RANK_ZERO,
+    state.param_manager.Initialize(rank, RANK_ZERO, state.mpi_comm,
                                    horovod_params != nullptr ? std::string(horovod_params) : "");
     state.param_manager.SetAutoTuning(true);
   }
@@ -2027,6 +2030,8 @@ void horovod_shutdown() {
   if (horovod_global.mpi_float16_t != MPI_DATATYPE_NULL) {
     MPI_Type_free(&horovod_global.mpi_float16_t);
   }
+
+  horovod_global.param_manager.FreeMpiTypes();
 
   if (horovod_global.should_finalize) {
 #if HAVE_DDL
