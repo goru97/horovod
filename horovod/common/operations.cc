@@ -1612,7 +1612,7 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
 
 #if HOROVOD_GPU_ALLREDUCE != 'N' && HOROVOD_GPU_ALLREDUCE != 'D'
   // Hierarchical allreduce is not supported without NCCL or DDL
-  state.param_manager.SetHierarchicalAllreduce(false);
+  state.param_manager.SetHierarchicalAllreduce(false, true);
 #endif
 
   // Issue warning if hierarchical allreduce is enabled in heterogeneous cluster

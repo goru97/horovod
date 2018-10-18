@@ -77,6 +77,9 @@ void ParameterManager::SetAutoTuning(bool active) {
     warmup_remaining_ = WARMUPS;
   }
   active_ = active;
+  if (!active_ && rank_ == root_rank_) {
+    std::cout << "finished autotuning" << std::endl;
+  }
 };
 
 bool ParameterManager::HierarchicalAllreduce() const {
@@ -355,7 +358,7 @@ void ParameterManager::BayesianParameter::OnTune(double score, Eigen::VectorXd& 
 }
 
 bool ParameterManager::BayesianParameter::IsDoneTuning() const {
-  return iteration_ > 10;
+  return iteration_ > 50;
 }
 
 void ParameterManager::BayesianParameter::ResetState() {
