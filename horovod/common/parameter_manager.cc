@@ -84,8 +84,8 @@ bool ParameterManager::HierarchicalAllreduce() const {
   return v > 0;
 }
 
-void ParameterManager::SetHierarchicalAllreduce(bool value) {
-  hierarchical_allreduce_.SetValue(value ? 1 : 0);
+void ParameterManager::SetHierarchicalAllreduce(bool value, bool fixed) {
+  hierarchical_allreduce_.SetValue(value ? 1 : 0, fixed);
 }
 
 int64_t ParameterManager::TensorFusionThresholdBytes() const {
@@ -93,20 +93,20 @@ int64_t ParameterManager::TensorFusionThresholdBytes() const {
   return b * 1024 * 1024;
 };
 
-void ParameterManager::SetTensorFusionThresholdBytes(int64_t threshold) {
+void ParameterManager::SetTensorFusionThresholdBytes(int64_t threshold, bool fixed) {
   Eigen::VectorXd v = joint_params_.BestValue();
   v[0] = threshold / (1024 * 1024);
-  joint_params_.SetValue(v);
+  joint_params_.SetValue(v, fixed);
 }
 
 double ParameterManager::CycleTimeMs() const {
   return active_ ? joint_params_.Value()[1] : joint_params_.BestValue()[1];
 };
 
-void ParameterManager::SetCycleTimeMs(double cycle_time_ms) {
+void ParameterManager::SetCycleTimeMs(double cycle_time_ms, bool fixed) {
   Eigen::VectorXd v = joint_params_.BestValue();
   v[1] = cycle_time_ms;
-  joint_params_.SetValue(v);
+  joint_params_.SetValue(v, fixed);
 }
 
 void ParameterManager::Update(const std::vector<std::string>& tensor_names, int64_t bytes, double seconds) {
@@ -195,11 +195,15 @@ void ParameterManager::TunableParameter<T>::Tune(double score) {
 }
 
 template <class T>
-void ParameterManager::TunableParameter<T>::SetValue(T value) {
-  value_ = value;
+void ParameterManager::TunableParameter<T>::SetValue(T value, bool fixed) {
   best_value_ = value;
   best_score_ = 0;
-  tunable_ = false;
+
+  if (fixed) {
+    // TODO(tgaddair): this breaks Bayesian optimization as this makes all parameters constant
+    value_ = value;
+    tunable_ = false;
+  }
 }
 
 template <class T>

@@ -50,17 +50,17 @@ public:
 
   // Do hierarchical allreduce with MPI + NCCL.
   bool HierarchicalAllreduce() const;
-  void SetHierarchicalAllreduce(bool value);
+  void SetHierarchicalAllreduce(bool value, bool fixed=false);
 
   // Threshold for Tensor Fusion.  All tensors that occupy memory beyond this
   // threshold will be fused.
   int64_t TensorFusionThresholdBytes() const;
-  void SetTensorFusionThresholdBytes(int64_t threshold);
+  void SetTensorFusionThresholdBytes(int64_t threshold, bool fixed=false);
 
   // Background thread cycle time in milliseconds.  Fractional numbers are
   // permitted.
   double CycleTimeMs() const;
-  void SetCycleTimeMs(double cycle_time_ms);
+  void SetCycleTimeMs(double cycle_time_ms, bool fixed=false);
 
   void Update(const std::vector<std::string>& tensor_names, int64_t bytes, double seconds);
 
@@ -87,7 +87,7 @@ private:
     TunableParameter(T initial_value, ParameterManager& parent, ITunableParameter* const next_param);
     void Tune(double score) override;
 
-    void SetValue(T value);
+    void SetValue(T value, bool fixed);
     inline T Value() const { return value_; };
     inline T BestValue() const { return best_value_; };
     inline double BestScore() const override { return best_score_; };

@@ -1583,23 +1583,14 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
   auto horovod_fusion_threshold = std::getenv(HOROVOD_FUSION_THRESHOLD);
   if (horovod_fusion_threshold != nullptr) {
     int64_t threshold = std::strtol(horovod_fusion_threshold, nullptr, 10);
-    state.param_manager.SetTensorFusionThresholdBytes(threshold);
+    state.param_manager.SetTensorFusionThresholdBytes(threshold, true);
   }
 
   // Override the cycle time.
   state.param_manager.SetCycleTimeMs(5);
   auto horovod_cycle_time = std::getenv(HOROVOD_CYCLE_TIME);
   if (horovod_cycle_time != nullptr) {
-    state.param_manager.SetCycleTimeMs(std::strtof(horovod_cycle_time, nullptr));
-  }
-
-  // Enable auto-tuning.
-  auto horovod_tune_params = std::getenv(HOROVOD_TUNE_PARAMS);
-  if (horovod_tune_params != nullptr && std::strtol(horovod_tune_params, nullptr, 10) > 0) {
-    auto horovod_params = std::getenv(HOROVOD_PARAMS_OUTPUT);
-    state.param_manager.Initialize(rank, RANK_ZERO,
-                                   horovod_params != nullptr ? std::string(horovod_params) : "");
-    state.param_manager.SetAutoTuning(true);
+    state.param_manager.SetCycleTimeMs(std::strtof(horovod_cycle_time, nullptr), true);
   }
 
   // Disable stall check.
@@ -1612,10 +1603,11 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
   // Set flag for hierarchical allreduce. Ignore if Horovod is running on a
   // single node.
   auto horovod_hierarchical_allreduce = std::getenv(HOROVOD_HIERARCHICAL_ALLREDUCE);
+  state.param_manager.SetHierarchicalAllreduce(false);
   if (horovod_hierarchical_allreduce != nullptr) {
     bool value = std::strtol(horovod_hierarchical_allreduce, nullptr, 10) > 0 &&
                  (size != local_size);
-    state.param_manager.SetHierarchicalAllreduce(value);
+    state.param_manager.SetHierarchicalAllreduce(value, true);
   }
 
 #if HOROVOD_GPU_ALLREDUCE != 'N' && HOROVOD_GPU_ALLREDUCE != 'D'
@@ -1630,6 +1622,15 @@ void BackgroundThreadLoop(HorovodGlobalState& state) {
            "performance of hierarchical allreduce. Consider assigning the same "
            "number of ranks to each node or disabling hierarchical allreduce."
         << std::endl;
+  }
+
+  // Enable auto-tuning.
+  auto horovod_tune_params = std::getenv(HOROVOD_TUNE_PARAMS);
+  if (horovod_tune_params != nullptr && std::strtol(horovod_tune_params, nullptr, 10) > 0) {
+    auto horovod_params = std::getenv(HOROVOD_PARAMS_OUTPUT);
+    state.param_manager.Initialize(rank, RANK_ZERO,
+                                   horovod_params != nullptr ? std::string(horovod_params) : "");
+    state.param_manager.SetAutoTuning(true);
   }
 
   // Initialize the tensor count table. No tensors are available yet.
