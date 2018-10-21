@@ -83,6 +83,6 @@ RUN apt-get install -y --no-install-recommends subversion && \
     rm -rf /examples/.svn
     
 # Generate ssh keys
-RUN ssh-keygen -f id_rsa -t rsa -N ''
-RUN cp ~/.ssh/id_rsa.pub ~/.ssh/authorized_keys
+RUN ssh-keygen -t rsa -N ''
+RUN cp $HOME/.ssh/id_rsa.pub $HOME/.ssh/authorized_keys
 WORKDIR "/examples"
